@@ -511,8 +511,7 @@ class AttendanceSystem:
                     continue
 
                 pil_image = Image.open(image_path).convert('L')
-                image_np = cv2.resize(np.array(pil_image, 'uint8'), self.FACE_SIZE)
-                image_np = self.clahe.apply(image_np)
+                image_np = np.array(pil_image, 'uint8')
                 face_id = int(os.path.split(image_path)[-1].split(".")[1])
                 faces.append(image_np)
                 ids.append(face_id)
