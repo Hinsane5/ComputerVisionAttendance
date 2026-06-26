@@ -162,8 +162,11 @@ class AttendanceSystem:
         self.train_btn = ttk.Button(actions, text="Train Model", command=self.train_images, style="Primary.TButton")
         self.train_btn.grid(row=0, column=1, sticky="ew", padx=(8, 0))
 
+        self.clear_train_btn = ttk.Button(register_card, text="Clear Training Data", command=self.confirm_clear_training, style="Primary.TButton")
+        self.clear_train_btn.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(18, 0))
+
         ttk.Label(register_card, textvariable=self.status_var, style="Status.TLabel", wraplength=360).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0)
+            row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0)
         )
 
         attendance_card = ttk.Frame(container, style="Card.TFrame", padding=22)
@@ -174,6 +177,12 @@ class AttendanceSystem:
         ttk.Label(attendance_card, text="Attendance Log", style="CardTitle.TLabel").grid(row=0, column=0, sticky="w")
         self.track_btn = ttk.Button(attendance_card, text="Track & Mark Attendance", command=self.track_images, style="Accent.TButton")
         self.track_btn.grid(row=1, column=0, sticky="ew", pady=(18, 14))
+
+        self.clear_attendance_btn = ttk.Button(attendance_card, text="Clear Today's Attendance", command=self.clear_today_attendance, style="Primary.TButton")
+        self.clear_attendance_btn.grid(row=2, column=0, sticky="ew", pady=(0, 14))
+
+        self.delete_attendance_btn = ttk.Button(attendance_card, text="Delete Selected Entry", command=self.delete_selected_attendance, style="Primary.TButton")
+        self.delete_attendance_btn.grid(row=3, column=0, sticky="ew", pady=(0, 14))
 
         table_frame = ttk.Frame(attendance_card, style="Card.TFrame")
         table_frame.grid(row=2, column=0, sticky="nsew")
@@ -282,6 +291,88 @@ class AttendanceSystem:
                             self.tv.insert('', 0, values=row)
             except Exception as e:
                 print(f"Error loading CSV: {e}")
+
+    def delete_training_images(self):
+        path = "TrainingImage"
+        removed = 0
+        for filename in os.listdir(path):
+            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                filepath = os.path.join(path, filename)
+                try:
+                    os.remove(filepath)
+                    removed += 1
+                except OSError:
+                    pass
+        return removed
+
+    def confirm_clear_training(self):
+        if messagebox.askyesno("Confirm", "Hapus semua file training di TrainingImage sekarang?"):
+            removed = self.delete_training_images()
+            self.set_status(f"Deleted {removed} training images.")
+
+    def clear_today_attendance(self):
+        date = datetime.datetime.now().strftime('%Y-%m-%d')
+        file_path = os.path.join("Attendance", f"Attendance_{date}.csv")
+        if not os.path.isfile(file_path):
+            self.set_status("Tidak ada file absensi hari ini untuk dihapus.")
+            return
+
+        if not messagebox.askyesno("Confirm", "Hapus file absensi hari ini?"):
+            return
+
+        try:
+            os.remove(file_path)
+            self.load_todays_attendance()
+            self.set_status("Absensi hari ini berhasil dihapus.")
+        except Exception as e:
+            self.set_status(f"Could not delete attendance: {e}")
+
+    def delete_selected_attendance(self):
+        selected = self.tv.selection()
+        if not selected:
+            self.set_status("Pilih baris absensi yang ingin dihapus.")
+            return
+
+        item = selected[0]
+        values = self.tv.item(item, 'values')
+        if len(values) != 4:
+            self.set_status("Data absensi tidak valid.")
+            return
+
+        user_id, name, date, timestamp = values
+        file_path = os.path.join("Attendance", f"Attendance_{date}.csv")
+        if not os.path.isfile(file_path):
+            self.set_status("File absensi untuk tanggal ini tidak ditemukan.")
+            return
+
+        if not messagebox.askyesno("Confirm", f"Hapus absensi {name} ({user_id}) pada {date} {timestamp}?"):
+            return
+
+        try:
+            rows = []
+            removed = False
+            with open(file_path, 'r', newline='') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                for row in reader:
+                    if row == [user_id, name, date, timestamp] and not removed:
+                        removed = True
+                        continue
+                    rows.append(row)
+
+            with open(file_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                if header:
+                    writer.writerow(header)
+                writer.writerows(rows)
+
+            if removed:
+                self.tv.delete(item)
+                self.set_status(f"Absensi {name} berhasil dihapus.")
+            else:
+                self.set_status("Baris absensi tidak ditemukan di file.")
+        except Exception as e:
+            self.set_status(f"Could not delete selected attendance: {e}")
 
     # func 2: take images
     def take_images(self):
@@ -434,7 +525,14 @@ class AttendanceSystem:
             temp_trainer_path = os.path.join("TrainingImageLabel", "Trainner.tmp.yml")
 
             self.recognizer = self.create_recognizer()
-            self.recognizer.train(faces, np.array(ids))
+            if os.path.isfile(trainer_path):
+                self.recognizer.read(trainer_path)
+                self.recognizer.update(faces, np.array(ids))
+                action = "Updated"
+            else:
+                self.recognizer.train(faces, np.array(ids))
+                action = "Trained"
+
             self.recognizer.save(temp_trainer_path)
 
             # Validate before replacing the current model so tracking never loads a partial file.
@@ -442,8 +540,13 @@ class AttendanceSystem:
             test_recognizer.read(temp_trainer_path)
             os.replace(temp_trainer_path, trainer_path)
 
-            self.set_status(f"Model trained with {len(faces)} images.")
-            self.root.after(0, messagebox.showinfo, "Success", "Model trained successfully.")
+            deleted = self.delete_training_images()
+            if deleted > 0:
+                self.set_status(f"{action} model with {len(faces)} images. Deleted {deleted} new training files.")
+            else:
+                self.set_status(f"{action} model with {len(faces)} images.")
+
+            self.root.after(0, messagebox.showinfo, "Success", f"Model {action.lower()} successfully.")
             
         except Exception as e:
             if 'temp_trainer_path' in locals() and os.path.exists(temp_trainer_path):
