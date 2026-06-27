@@ -1,0 +1,73 @@
+name: Build desktop app
+
+# Builds a Windows .exe and a macOS .app, then attaches both to a GitHub
+# Release. Trigger it by pushing a version tag, e.g.  git tag v1.0.0 && git push origin v1.0.0
+# You can also run it manually from the Actions tab (workflow_dispatch).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: AttendanceSystem-Windows.zip
+          - os: macos-latest
+            artifact: AttendanceSystem-macOS.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: pyinstaller --noconfirm --onefile --windowed --name AttendanceSystem --add-data "haarcascade_frontalface_default.xml;." main.py
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: pyinstaller --noconfirm --windowed --name AttendanceSystem --add-data "haarcascade_frontalface_default.xml:." main.py
+
+      - name: Add camera permission key (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          PLIST=dist/AttendanceSystem.app/Contents/Info.plist
+          MSG="This app uses the camera to capture and recognize faces for attendance."
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string \"$MSG\"" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription \"$MSG\"" "$PLIST"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist/AttendanceSystem.exe -DestinationPath AttendanceSystem-Windows.zip
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/AttendanceSystem.app AttendanceSystem-macOS.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
