@@ -30,6 +30,16 @@ time you open it. This is expected — here is how to get past it:
 - **Mac:** right-click (or Control-click) the app → **Open** → click **Open** again.
 - **Windows:** on the "Windows protected your PC" screen, click **More info** → **Run anyway**.
 
+> **Mac says "AttendanceSystem is damaged and can't be opened"?** That is macOS
+> blocking the download, not a real problem. Open the Terminal app and run this
+> once (drag the app onto the Terminal window to fill in the path):
+>
+> ```bash
+> xattr -dr com.apple.quarantine /path/to/AttendanceSystem.app
+> ```
+>
+> Then double-click the app again.
+
 > The app asks for camera access on first use — click **Allow**. Your data
 > (students, model, attendance logs) is saved in an `AttendanceSystem` folder in
 > your home directory.

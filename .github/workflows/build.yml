@@ -52,6 +52,13 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string \"$MSG\"" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription \"$MSG\"" "$PLIST"
 
+      - name: Ad-hoc code sign (macOS)
+        if: runner.os == 'macOS'
+        # Free ad-hoc signature. Stops the "app is damaged" Gatekeeper error on
+        # Apple Silicon; users still right-click -> Open once to bypass the
+        # "unidentified developer" prompt (no paid Apple Developer ID needed).
+        run: codesign --force --deep --sign - dist/AttendanceSystem.app
+
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: Compress-Archive -Path dist/AttendanceSystem.exe -DestinationPath AttendanceSystem-Windows.zip
