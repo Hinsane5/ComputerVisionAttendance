@@ -9,6 +9,29 @@ import pandas as pd
 import datetime
 import time
 import threading
+import sys
+
+
+def resource_path(name):
+    """Locate a read-only bundled resource (works in dev and PyInstaller builds)."""
+    if getattr(sys, "frozen", False):
+        return os.path.join(sys._MEIPASS, name)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
+
+
+def app_data_dir():
+    """Writable folder for runtime data (model, CSVs, captured images)."""
+    if getattr(sys, "frozen", False):
+        base = os.path.join(os.path.expanduser("~"), "AttendanceSystem")
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+# Run all relative data paths out of a writable, stable location.
+os.chdir(app_data_dir())
+
 
 class AttendanceSystem:
     FACE_SIZE = (200, 200)
@@ -38,7 +61,7 @@ class AttendanceSystem:
         self.camera_window = None
 
         # variables
-        self.face_detector = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+        self.face_detector = cv2.CascadeClassifier(resource_path("haarcascade_frontalface_default.xml"))
         self.recognizer = self.create_recognizer()
         self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         
@@ -56,7 +79,7 @@ class AttendanceSystem:
             if not os.path.exists(path):
                 os.makedirs(path)
         
-        if not os.path.isfile("haarcascade_frontalface_default.xml"):
+        if not os.path.isfile(resource_path("haarcascade_frontalface_default.xml")):
             messagebox.showerror("Error", "haarcascade_frontalface_default.xml is missing!")
             self.root.destroy()
 
